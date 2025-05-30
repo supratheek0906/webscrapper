@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Contact Extractor</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- Bootstrap CSS CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background: #f8f9fa; }
+        .main-title { font-size: 2.8rem; font-weight: bold; text-align: center; margin-top: 18px; margin-bottom: 18px; letter-spacing: 1px; color: #2b2d42; }
+        .card-bar { max-width: 750px; min-width: 320px; margin: 0 auto 32px auto; border-radius: 16px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); padding: 14px 24px 10px 24px; background: #fff; }
+        .input-wrapper { display: flex; gap: 10px; align-items: center; }
+        .input-wrapper .form-control { flex: 2 1 0; }
+        .input-wrapper .btn-success {
+            flex: 1 1 0;
+            height: 40px;
+            font-size: 1rem;
+            border-radius: 10px;
+            white-space: nowrap;
+            min-width: 0;
+        }
+        .website-col {
+            max-width: 250px;
+            word-break: break-all;
+            white-space: normal;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .table thead { background: linear-gradient(90deg, #5e72e4 0%, #2dce89 100%); color: #fff; }
+        .table-striped > tbody > tr:nth-of-type(odd) { background-color: #e9f7ef; }
+        .table-striped > tbody > tr:nth-of-type(even) { background-color: #f8f9fa; }
+        .table td, .table th { vertical-align: middle !important; word-break: break-word; }
+        th.id-col, td.id-col { white-space: nowrap; min-width: 40px; text-align: center; }
+        th.date-col, td.date-col,
+        th.delete-col, td.delete-col { white-space: nowrap; text-align: center; vertical-align: middle; }
+        .alert-info { text-align: center; font-size: 1.1em; }
+        .search-bar-row { display: flex; justify-content: flex-start; align-items: center; margin-bottom: 18px; }
+        .search-bar { width: 220px; margin-left: 0; }
+        .table-responsive { overflow-x: auto; }
+        @media (max-width: 900px) { .card-bar { max-width: 100%; } }
+        @media (max-width: 600px) {
+            .main-title { font-size: 2rem; margin-top: 10px; margin-bottom: 10px;}
+            .card-bar { max-width: 100%; min-width: 0; padding: 10px 8px 8px 8px; }
+            .input-wrapper { flex-direction: column; gap: 10px; }
+            .form-control, .btn-success { width: 100%; flex: unset; }
+            .search-bar-row { flex-direction: column; align-items: flex-start; }
+            .search-bar { width: 100%; }
+            .website-col { max-width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="main-title">Contact Extractor</div>
+        <div class="card-bar">
+            <form method="POST" class="mb-0">
+                <div class="input-wrapper">
+                    <input type="text" class="form-control" name="url" placeholder="Enter website URL" required>
+                    <button type="submit" class="btn btn-success">Extract Contacts</button>
+                </div>
+            </form>
+            {% if message %}
+            <div class="alert alert-info mt-3 mb-0">{{ message }}</div>
+            {% endif %}
+        </div>
+        <div class="row justify-content-center mt-5">
+            <div class="col-md-12">
+                <h4 class="mb-3 text-center">Stored Contacts</h4>
+                <div class="search-bar-row">
+                    <input type="text" id="tableSearch" class="form-control search-bar" placeholder="Search contacts...">
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-bordered table-striped align-middle" id="contactsTable">
+                        <thead>
+                            <tr>
+                                <th class="id-col">ID</th>
+                                <th class="website-col">Website (Refresh)</th>
+                                <th>Emails</th>
+                                <th>Phone Numbers</th>
+                                <th class="date-col">Date Added</th>
+                                <th class="delete-col">Delete</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in all_contacts %}
+                            <tr>
+                                <td class="id-col">{{ loop.index }}</td>
+                                <!-- WEBSITE COLUMN WITH REFRESH ICON -->
+                                <td class="website-col" style="vertical-align: middle;">
+                                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                                        <a href="{{ row.website }}" target="_blank" style="flex:1;">{{ row.website }}</a>
+                                        <form method="POST" action="{{ url_for('refresh_contact', sno=row.sno) }}" style="margin-left: 8px;">
+                                            <button type="submit" title="Refresh" style="background: none; border: none; padding: 0; cursor: pointer;">
+                                                <img src="{{ url_for('static', filename='rotate-cw.png') }}" alt="Refresh" width="18" height="18">
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                                <td>
+                                    {% for email in row.emails.split(',') if email %}
+                                        {{ email }}<br>
+                                    {% endfor %}
+                                </td>
+                                <td>
+                                    {% for phone in row.phones.split(',') if phone %}
+                                        {{ phone }}<br>
+                                    {% endfor %}
+                                </td>
+                                <td class="date-col">
+                                    {% if row.date_uploaded %}
+                                        {{ row.date_uploaded.strftime("%d-%b-%Y").lower() }}
+                                    {% endif %}
+                                </td>
+                                <td class="delete-col">
+                                    <form method="POST"
+                                          id="deleteForm{{ row.sno }}"
+                                          action="{{ url_for('delete_contact', sno=row.sno) }}"
+                                          style="display:inline;">
+                                        <button type="button"
+                                                title="Delete"
+                                                style="background: none; border: none; padding: 0; margin: 0; cursor: pointer;"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#deleteModal"
+                                                onclick="setDeleteFormAction(this)">
+                                            <img src="{{ url_for('static', filename='delete.png') }}" alt="Delete" width="18" height="18" style="vertical-align: middle;">
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="6" class="text-center">No contacts found yet.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="deleteModalLabel">Confirm Deletion</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            Are you sure you want to delete this contact from your view?
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" class="btn btn-danger" id="confirmDeleteBtn">Delete</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.getElementById('tableSearch').addEventListener('keyup', function() {
+            var value = this.value.toLowerCase();
+            var rows = document.querySelectorAll('#contactsTable tbody tr');
+            rows.forEach(function(row) {
+                var text = row.textContent.toLowerCase();
+                row.style.display = text.indexOf(value) > -1 ? '' : 'none';
+            });
+        });
+        let deleteFormAction = null;
+        function setDeleteFormAction(btn) {
+            deleteFormAction = btn.closest('form');
+        }
+        document.addEventListener('DOMContentLoaded', function () {
+            document.getElementById('confirmDeleteBtn').addEventListener('click', function () {
+                if (deleteFormAction) {
+                    deleteFormAction.submit();
+                }
+            });
+        });
+    </script>
+</body>
+</html>
