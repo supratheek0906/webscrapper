@@ -6,7 +6,7 @@ import mysql.connector
 from datetime import datetime
 
 app = Flask(__name__)
-app.secret_key = '1234'  # Replace with a secure random string
+app.secret_key = '1234'  
 
 db_config = {
     'host': 'localhost',
