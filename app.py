@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template, redirect, url_for, session
+from flask import Flask, request, render_template, redirect, url_for
 import requests
 from bs4 import BeautifulSoup
 import re
@@ -66,7 +66,7 @@ def store_or_update_contacts_in_mysql(emails, phones, website):
         cursor = conn.cursor()
         emails_str = ','.join(sorted(emails))
         phones_str = ','.join(sorted(phones))
-        cursor.execute("SELECT emails, phones FROM contacts WHERE website = %s", (website,))
+        cursor.execute("SELECT emails, phones FROM contacts WHERE website = %s AND deleted = FALSE", (website,))
         result = cursor.fetchone()
         if result:
             old_emails, old_phones = result
@@ -82,8 +82,8 @@ def store_or_update_contacts_in_mysql(emails, phones, website):
                 return "Website already exists in database with same contacts. No update needed."
         else:
             cursor.execute("""
-                INSERT INTO contacts (website, emails, phones, date_uploaded)
-                VALUES (%s, %s, %s, CURRENT_DATE)
+                INSERT INTO contacts (website, emails, phones, date_uploaded, deleted)
+                VALUES (%s, %s, %s, CURRENT_DATE, FALSE)
             """, (website, emails_str, phones_str))
             conn.commit()
             return "Website and contacts added successfully!"
@@ -101,9 +101,8 @@ def fetch_all_contacts():
     try:
         conn = mysql.connector.connect(**db_config)
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT * FROM contacts ORDER BY sno ASC")
+        cursor.execute("SELECT * FROM contacts WHERE deleted = FALSE ORDER BY sno ASC")
         contacts = cursor.fetchall()
-        # Convert date_uploaded to datetime object if it's a string
         for row in contacts:
             if isinstance(row['date_uploaded'], str):
                 try:
@@ -116,9 +115,6 @@ def fetch_all_contacts():
         if conn is not None and conn.is_connected():
             cursor.close()
             conn.close()
-    # Filter out deleted contacts stored in session
-    deleted = set(session.get('deleted_contacts', []))
-    contacts = [c for c in contacts if c['sno'] not in deleted]
     return contacts
 
 @app.route('/', methods=['GET', 'POST'])
@@ -133,9 +129,18 @@ def index():
 
 @app.route('/delete/<int:sno>', methods=['POST'])
 def delete_contact(sno):
-    deleted = set(session.get('deleted_contacts', []))
-    deleted.add(sno)
-    session['deleted_contacts'] = list(deleted)
+    conn = None
+    try:
+        conn = mysql.connector.connect(**db_config)
+        cursor = conn.cursor()
+        cursor.execute("UPDATE contacts SET deleted = TRUE WHERE sno = %s", (sno,))
+        conn.commit()
+    except Exception as e:
+        print("MySQL Error (delete):", e)
+    finally:
+        if conn is not None and conn.is_connected():
+            cursor.close()
+            conn.close()
     return redirect(url_for('index'))
 
 @app.route('/refresh/<int:sno>', methods=['POST'])
