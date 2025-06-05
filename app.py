@@ -1,12 +1,12 @@
 from flask import Flask, request, render_template, redirect, url_for
 import requests
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, NavigableString, Comment
 import re
 import mysql.connector
 from datetime import datetime
 
 app = Flask(__name__)
-app.secret_key = '1234'  
+app.secret_key = '1234'
 
 db_config = {
     'host': 'localhost',
@@ -32,8 +32,17 @@ def extract_contacts_from_url(url):
 
     soup = BeautifulSoup(response.content, "html.parser")
     text = soup.get_text(separator=' ', strip=True)
-    email_pattern = r'[a-zA-Z0-9_.%+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+'
-
+    email_pattern = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?:\.[a-zA-Z]{2,})?'
+    emails = set(re.findall(email_pattern, text))
+    for span in soup.find_all("span", class_="elementor-icon-list-text"):
+        parts = []
+        for node in span.descendants:
+            if isinstance(node, NavigableString) and not isinstance(node, Comment):
+                parts.append(str(node))
+        email_candidate = ''.join(parts).replace(' ', '').replace('\n', '')
+        match = re.search(email_pattern, email_candidate)
+        if match:
+            emails.add(match.group())
     phone_pattern = (
         r'\+91[-\s]?\d{10}'
         r'|\+91\s\d{2,4}\s\d{6,8}'
@@ -49,15 +58,10 @@ def extract_contacts_from_url(url):
         r'|\+91[\s-]*\d{2,4}[\s-]*\d{5,8}(?:/\d{2,8})+\b'
         r'|\b\d{3,4}[-\s]\d{6,8}\b'
     )
-
     date_pattern = r'\b\d{1,2}-\d{1,2}-\d{4}\b'
-
-    emails = list(set(re.findall(email_pattern, text)))
     phones = list(set(re.findall(phone_pattern, text)))
-
     filtered_phones = [p for p in phones if not re.fullmatch(date_pattern, p)]
-
-    return emails, filtered_phones
+    return list(emails), filtered_phones
 
 def store_or_update_contacts_in_mysql(emails, phones, website):
     conn = None
