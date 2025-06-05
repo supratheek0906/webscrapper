@@ -15,6 +15,14 @@ db_config = {
     'database': 'contactdb'
 }
 
+def decode_cfemail(cfemail):
+    r = int(cfemail[:2], 16)
+    email = ''.join(
+        chr(int(cfemail[i:i+2], 16) ^ r)
+        for i in range(2, len(cfemail), 2)
+    )
+    return email
+
 def extract_contacts_from_url(url):
     try:
         headers = {
@@ -34,6 +42,18 @@ def extract_contacts_from_url(url):
     text = soup.get_text(separator=' ', strip=True)
     email_pattern = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?:\.[a-zA-Z]{2,})?'
     emails = set(re.findall(email_pattern, text))
+
+    for span in soup.find_all("span", class_="__cf_email__"):
+        cfemail = span.get("data-cfemail")
+        if cfemail:
+            emails.add(decode_cfemail(cfemail))
+
+    for a in soup.find_all('a', href=True):
+        href = a['href']
+        if href.startswith('mailto:'):
+            email = href[7:].split('?')[0]
+            emails.add(email.strip())
+
     for span in soup.find_all("span", class_="elementor-icon-list-text"):
         parts = []
         for node in span.descendants:
@@ -43,6 +63,7 @@ def extract_contacts_from_url(url):
         match = re.search(email_pattern, email_candidate)
         if match:
             emails.add(match.group())
+
     phone_pattern = (
         r'\+91[-\s]?\d{10}'
         r'|\+91\s\d{2,4}\s\d{6,8}'
