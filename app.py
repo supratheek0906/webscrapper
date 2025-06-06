@@ -78,6 +78,7 @@ def extract_contacts_from_url(url):
             r'|\b\d{3,4}-\d{5,8}(?:/\d{2,8})+\b'
             r'|\+91[\s-]*\d{2,4}[\s-]*\d{5,8}(?:/\d{2,8})+\b'
             r'|\b\d{3,4}[-\s]\d{6,8}\b'
+            r'\+91\s\d{5}\s\d{5}'
         )
         date_pattern = r'\b\d{1,2}-\d{1,2}-\d{4}\b'
         page_phones = set()
