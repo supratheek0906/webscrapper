@@ -8,7 +8,31 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body { background: #f8f9fa; }
-        .main-title { font-size: 2.8rem; font-weight: bold; text-align: center; margin-top: 18px; margin-bottom: 18px; letter-spacing: 1px; color: #2b2d42; }
+        .main-title-wrapper {
+            display: flex;
+font-weight: bold;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 5px;
+            margin-bottom: 18px;
+        }
+       .main-title {
+    font-size: 2.8rem;
+    font-weight: bold;
+    text-align: left;         /* or center, as you prefer */
+    margin-top: 20px;
+    margin-bottom: 18px;
+    margin-left: 410px;       /* adjust this value as needed */
+    letter-spacing: 1px;
+    color: #2b2d42;
+}
+
+
+        .agent-info {
+            font-size: 1rem;
+            white-space: nowrap;
+            margin-left: 20px;
+        }
         .card-bar { max-width: 750px; min-width: 320px; margin: 0 auto 32px auto; border-radius: 16px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); padding: 14px 24px 10px 24px; background: #fff; }
         .input-wrapper { display: flex; gap: 10px; align-items: center; }
         .input-wrapper .form-control { flex: 2 1 0; }
@@ -40,7 +64,9 @@
         .table-responsive { overflow-x: auto; }
         @media (max-width: 900px) { .card-bar { max-width: 100%; } }
         @media (max-width: 600px) {
-            .main-title { font-size: 2rem; margin-top: 10px; margin-bottom: 10px;}
+            .main-title { font-size: 2rem; }
+            .main-title-wrapper { margin-top: 30px; margin-bottom: 10px; flex-direction: column; align-items: flex-start; }
+            .agent-info { margin-left: 0; margin-top: 8px; align-self: flex-end; }
             .card-bar { max-width: 100%; min-width: 0; padding: 10px 8px 8px 8px; }
             .input-wrapper { flex-direction: column; gap: 10px; }
             .form-control, .btn-success { width: 100%; flex: unset; }
@@ -48,11 +74,28 @@
             .search-bar { width: 100%; }
             .website-col { max-width: 100%; }
         }
+        .call-link {
+            color: #198754;
+            text-decoration: underline;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        .call-link:hover {
+            color: #145c32;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="main-title">Contact Extractor</div>
+        <div class="main-title-wrapper">
+            <div class="main-title">
+                Contact Extractor
+            </div>
+            <span class="agent-info">
+                Agent: {{ session['agent_number'] }}
+                <a href="{{ url_for('logout') }}" class="btn btn-link btn-sm">Logout</a>
+            </span>
+        </div>
         <div class="card-bar">
             <form method="POST" class="mb-0">
                 <div class="input-wrapper">
@@ -104,12 +147,12 @@
                                 </td>
                                 <td>
                                     {% for mobile in (row.mobiles or '').split(',') if mobile %}
-                                        {{ mobile }}<br>
+                                        <a href="#" class="call-link" data-mobile="{{ mobile|replace(' ', '')|replace('-', '')|trim }}">{{ mobile|replace(' ', '')|replace('-', '')|trim }}</a><br>
                                     {% endfor %}
                                 </td>
                                 <td>
                                     {% for landline in (row.landlines or '').split(',') if landline %}
-                                        {{ landline }}<br>
+                                        <a href="#" class="call-link" data-mobile="{{ landline|replace(' ', '')|replace('-', '')|trim }}">{{ landline|replace(' ', '')|replace('-', '')|trim }}</a><br>
                                     {% endfor %}
                                 </td>
                                 <td class="date-col">
@@ -143,6 +186,17 @@
                 </div>
             </div>
         </div>
+    </div>
+    <!-- Toast for call status -->
+    <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 9999">
+      <div id="callToast" class="toast align-items-center text-bg-primary border-0" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="d-flex">
+          <div class="toast-body" id="callToastBody">
+            <!-- Status will appear here -->
+          </div>
+          <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+      </div>
     </div>
     <div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
       <div class="modal-dialog modal-dialog-centered">
@@ -178,6 +232,39 @@
         document.addEventListener('DOMContentLoaded', function () {
             document.getElementById('confirmDeleteBtn').addEventListener('click', function () {
                 if (deleteFormAction) { deleteFormAction.submit(); }
+            });
+
+            // Click-to-call AJAX logic
+            document.querySelectorAll('.call-link').forEach(function(link) {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    var number = this.getAttribute('data-mobile');
+                    fetch('{{ url_for("click2call") }}', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        body: JSON.stringify({ number: number })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        let toastBody = document.getElementById('callToastBody');
+                        if (data.success) {
+                            toastBody.textContent = "Call initiated: " + number;
+                        } else {
+                            toastBody.textContent = "Call failed: " + (data.message || "Unknown error");
+                        }
+                        var toast = new bootstrap.Toast(document.getElementById('callToast'));
+                        toast.show();
+                    })
+                    .catch(() => {
+                        let toastBody = document.getElementById('callToastBody');
+                        toastBody.textContent = "Call failed: Network error";
+                        var toast = new bootstrap.Toast(document.getElementById('callToast'));
+                        toast.show();
+                    });
+                });
             });
         });
     </script>
