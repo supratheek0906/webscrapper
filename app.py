@@ -1,9 +1,10 @@
-from flask import Flask, request, render_template, redirect, url_for
+from flask import Flask, request, render_template, redirect, url_for, jsonify, flash, session
 import requests
 from bs4 import BeautifulSoup, NavigableString, Comment
 import re
 import mysql.connector
 from datetime import datetime
+import json
 
 app = Flask(__name__)
 app.secret_key = '1234'
@@ -15,6 +16,32 @@ db_config = {
     'database': 'contactdb'
 }
 
+# Knowlarity API config
+KNOWLARITY_SR_API_KEY = '7dee7087-b035-4557-9489-53b943dbfbcc'
+KNOWLARITY_X_API_KEY = 'R3zHw7U5agaREaDVuzBeN6ke5vrY3QXda97pH2PJ'
+KNOWLARITY_K_NUMBER = '+917353950600'
+KNOWLARITY_AGENT_NUMBER = '+917093284780'
+KNOWLARITY_CALLER_ID = '+918048160852'
+KNOWLARITY_CHANNEL = 'Basic'
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    error = None
+    if request.method == 'POST':
+        agent_number = request.form.get('agent_number', '').strip()
+        if not agent_number or not (agent_number.isdigit() or (agent_number.startswith('+') and agent_number[1:].isdigit())) or len(agent_number.replace('+', '')) < 10:
+            error = "Please enter a valid agent number."
+        else:
+            session['agent_number'] = agent_number
+            return redirect(url_for('index'))
+    return render_template('login.html', error=error)
+
+# ADD THIS ROUTE TO FIX THE BuildError
+@app.route('/logout')
+def logout():
+    session.pop('agent_number', None)
+    return redirect(url_for('login'))
+
 def decode_cfemail(cfemail):
     r = int(cfemail[:2], 16)
     email = ''.join(
@@ -22,6 +49,24 @@ def decode_cfemail(cfemail):
         for i in range(2, len(cfemail), 2)
     )
     return email
+
+def is_mobile(number):
+    digits = re.sub(r'\D', '', number)
+    return len(digits) == 10 and digits[0] in '789'
+
+def is_landline(number):
+    digits = re.sub(r'\D', '', number)
+    return (len(digits) >= 10 and (digits.startswith('0') or digits[0] in '23456'))
+
+def format_indian_number(number, is_landline=False):
+    digits = re.sub(r'\D', '', number)
+    if is_landline:
+        if digits.startswith('0'):
+            digits = digits[1:]
+        return f'+91{digits}' if digits else ''
+    else:
+        digits = digits[-10:]
+        return f'+91{digits}' if digits else ''
 
 def extract_contacts_from_url(url):
     headers = {
@@ -64,22 +109,7 @@ def extract_contacts_from_url(url):
             match = re.search(email_pattern, email_candidate)
             if match:
                 page_emails.add(match.group())
-        phone_pattern = (
-            r'\+91[-\s]?\d{10}'
-            r'|\+91\s\d{2,4}\s\d{6,8}'
-            r'|\b0\d{9,10}\b'
-            r'|\b\d{10}\b'
-            r'|\b\d{3,4}\s\d{3,4}\s\d{3,4}\b'
-            r'|\+91(?:-\d{2,5}){1,5}(?:/\d{1,4})?'
-            r'|\b(?:\d{2,5}-){2,}\d{2,5}(?:/\d{1,4})?\b'
-            r'|\b1\d{3}[\s-]?\d{3}[\s-]?\d{4}\b'
-            r'|\b0?\d{2,4}-\d{6,8}\b'
-            r'|\+91[\s-]?\d{2,4}[\s-]?\d{4}[\s-]?\d{4}'
-            r'|\b\d{3,4}-\d{5,8}(?:/\d{2,8})+\b'
-            r'|\+91[\s-]*\d{2,4}[\s-]*\d{5,8}(?:/\d{2,8})+\b'
-            r'|\b\d{3,4}[-\s]\d{6,8}\b'
-            r'\+91\s\d{5}\s\d{5}'
-        )
+        phone_pattern = r'(?:(?:\+91[\-\s]*)?(?:0)?[1-9]\d{1,4}[\-\s]?\d{6,8})'
         date_pattern = r'\b\d{1,2}-\d{1,2}-\d{4}\b'
         page_phones = set()
         for phone in re.findall(phone_pattern, page_text):
@@ -87,13 +117,10 @@ def extract_contacts_from_url(url):
                 page_phones.add(phone)
         return page_emails, page_phones, page_soup
 
-    # 1. Process main URL
     main_emails, main_phones, soup = process_page(url)
     emails.update(main_emails)
     phones.update(main_phones)
     visited.add(url)
-
-    # 2. If either is empty, look for contact pages
     if (not emails or not phones) and soup:
         contact_links = set()
         for a in soup.find_all('a', href=True):
@@ -108,24 +135,17 @@ def extract_contacts_from_url(url):
             emails.update(c_emails)
             phones.update(c_phones)
 
-    # Split phones into mobiles and landlines using 0 or 4 logic
+    print("Raw phone matches:", phones)
+
     mobiles = set()
     landlines = set()
     for phone in phones:
-        stripped = phone.strip()
-        if stripped.startswith('+91'):
-            rest = stripped[3:].lstrip('- ').lstrip()
-            if rest.startswith(('0', '4')):
-                landlines.add(phone)
-            else:
-                mobiles.add(phone)
-        else:
-            digits = re.sub(r'[^\d]', '', stripped)
-            if digits.startswith(('0', '4')):
-                landlines.add(phone)
-            else:
-                mobiles.add(phone)
-
+        if is_mobile(phone):
+            mobiles.add(format_indian_number(phone, is_landline=False))
+        elif is_landline(phone):
+            landlines.add(format_indian_number(phone, is_landline=True))
+    print("Extracted mobiles:", mobiles)
+    print("Extracted landlines:", landlines)
     return list(emails), list(mobiles), list(landlines)
 
 def store_or_update_contacts_in_mysql(emails, mobiles, landlines, website):
@@ -189,6 +209,8 @@ def fetch_all_contacts():
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
+    if 'agent_number' not in session:
+        return redirect(url_for('login'))
     message = ""
     if request.method == 'POST':
         url = request.form['url']
@@ -232,6 +254,69 @@ def refresh_contact(sno):
             cursor.close()
             conn.close()
     return redirect(url_for('index'))
+
+@app.route('/click2call', methods=['POST'])
+def click2call():
+    if 'agent_number' not in session:
+        return jsonify({"success": False, "message": "You must log in with your agent number."}), 401
+    customer_number = request.json.get('number')
+    agent_number = session['agent_number']
+    if not customer_number:
+        return jsonify({"success": False, "message": "Customer number is required"})
+    if is_mobile(customer_number):
+        customer_number = format_indian_number(customer_number, is_landline=False)
+    elif is_landline(customer_number):
+        customer_number = format_indian_number(customer_number, is_landline=True)
+    else:
+        customer_number = format_indian_number(customer_number, is_landline=False)
+    if not customer_number.startswith('+91') or len(customer_number) < 12:
+        return jsonify({"success": False, "message": "Phone number must be in E.164 format (starting with +91 and STD code for landlines or 10 digits for mobiles)"})
+    api_url = f"https://kpi.knowlarity.com/{KNOWLARITY_CHANNEL}/v1/account/call/makecall"
+    headers = {
+        'Content-Type': 'application/json',
+        'authorization': KNOWLARITY_SR_API_KEY,
+        'x-api-key': KNOWLARITY_X_API_KEY,
+        'channel': KNOWLARITY_CHANNEL,
+        'cache-control': 'no-cache'
+    }
+    payload = {
+        "k_number": KNOWLARITY_K_NUMBER,
+        "agent_number": agent_number,
+        "customer_number": customer_number,
+        "caller_id": KNOWLARITY_CALLER_ID
+    }
+    try:
+        response = requests.post(api_url, json=payload, headers=headers, timeout=30)
+        print("Knowlarity API status:", response.status_code)
+        print("Knowlarity API response:", response.text)
+        if response.status_code == 200:
+            try:
+                data = response.json()
+                return jsonify({"success": True, "message": "Call initiated successfully!", "data": data})
+            except json.JSONDecodeError:
+                return jsonify({"success": True, "message": "Call initiated successfully!", "data": {"raw_response": response.text}})
+        else:
+            try:
+                error_data = response.json()
+            except json.JSONDecodeError:
+                error_data = {"raw_response": response.text}
+            return jsonify({"success": False, "message": f"API returned status code: {response.status_code}", "error_details": error_data})
+    except requests.exceptions.Timeout:
+        return jsonify({"success": False, "message": "Request timeout - API took too long to respond"})
+    except requests.exceptions.ConnectionError:
+        return jsonify({"success": False, "message": "Connection error - Unable to reach Knowlarity API"})
+    except requests.exceptions.RequestException as e:
+        return jsonify({"success": False, "message": f"Network error: {str(e)}"})
+    except Exception as e:
+        return jsonify({"success": False, "message": f"Unexpected error: {str(e)}"})
+
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({"error": "Endpoint not found"}), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    return jsonify({"error": "Internal server error"}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
