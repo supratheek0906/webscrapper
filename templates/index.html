@@ -8,32 +8,48 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body { background: #f8f9fa; }
-        .main-title { 
-            font-size: 2.2rem; 
-            font-weight: bold; 
-            color: #2b2d42; 
-            margin: 24px 0 8px 0;
+        .main-title-wrapper {
+            display: flex;
+            font-weight: bold;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 5px;
+            margin-bottom: 18px;
+            flex-wrap: wrap;
+        }
+        .main-title {
+            font-size: 2.2rem;
+            font-weight: bold;
             text-align: center;
+            margin: 24px 0 8px 0;
             letter-spacing: 1px;
+            color: #2b2d42;
+            flex: 1 1 100%;
         }
         .agent-info {
             font-size: 1rem;
+            white-space: nowrap;
+            margin-left: 0;
+            margin-bottom: 8px;
             text-align: center;
-            margin-bottom: 16px;
+            flex: 1 1 100%;
         }
         .card-bar {
-            background: #fff;
+            width: 100%;
+            max-width: 900px;
+            margin: 0 auto 32px auto;
             border-radius: 16px;
             box-shadow: 0 2px 12px rgba(0,0,0,0.06);
             padding: 18px 16px 14px 16px;
-            margin-bottom: 32px;
+            background: #fff;
         }
         .input-wrapper {
             display: flex;
             gap: 10px;
             align-items: center;
+            flex-wrap: wrap;
         }
-        .input-wrapper .form-control { flex: 2 1 0; }
+        .input-wrapper .form-control { flex: 2 1 0; min-width: 0; }
         .input-wrapper .btn-success {
             flex: 1 1 0;
             height: 40px;
@@ -57,7 +73,7 @@
         th.date-col, td.date-col,
         th.delete-col, td.delete-col { white-space: nowrap; text-align: center; vertical-align: middle; }
         .alert-info { text-align: center; font-size: 1.1em; }
-        .search-bar-row { display: flex; justify-content: flex-start; align-items: center; margin-bottom: 18px; }
+        .search-bar-row { display: flex; justify-content: flex-start; align-items: center; margin-bottom: 18px; flex-wrap: wrap; }
         .search-bar { width: 220px; margin-left: 0; }
         .table-responsive { overflow-x: auto; }
         .call-link {
@@ -69,45 +85,62 @@
         .call-link:hover {
             color: #145c32;
         }
+        /* Responsive styles */
         @media (max-width: 900px) {
             .card-bar { max-width: 100%; }
         }
         @media (max-width: 600px) {
-            .main-title { font-size: 1.5rem; }
-            .agent-info { font-size: 0.95rem; }
-            .card-bar { padding: 10px 4px 8px 4px; }
+            .main-title { font-size: 1.3rem; }
+            .main-title-wrapper { flex-direction: column; align-items: stretch; margin-top: 18px; }
+            .agent-info { margin-left: 0; margin-top: 8px; align-self: flex-end; }
+            .card-bar { max-width: 100%; min-width: 0; padding: 10px 4px 8px 4px; }
             .input-wrapper { flex-direction: column; gap: 10px; }
             .form-control, .btn-success { width: 100%; flex: unset; }
             .search-bar-row { flex-direction: column; align-items: flex-start; }
             .search-bar { width: 100%; }
             .website-col { max-width: 100%; }
+            /* Table mobile stacking */
+            .table thead { display: none; }
+            .table, .table tbody, .table tr, .table td { display: block; width: 100%; }
+            .table tr { margin-bottom: 1rem; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.04); background: #fff; }
+            .table td { text-align: right; padding-left: 50%; position: relative; border: none; border-bottom: 1px solid #eee; }
+            .table td::before {
+                content: attr(data-label);
+                position: absolute;
+                left: 1rem;
+                width: 45%;
+                white-space: nowrap;
+                text-align: left;
+                font-weight: bold;
+                color: #2b2d42;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="main-title">Contact Extractor</div>
-        <div class="agent-info">
-            Agent: {{ session['agent_number'] }}
-            <a href="{{ url_for('logout') }}" class="btn btn-link btn-sm">Logout</a>
-        </div>
-        <div class="row justify-content-center">
-            <div class="col-12 col-md-8 col-lg-7">
-                <div class="card-bar">
-                    <form method="POST" class="mb-0">
-                        <div class="input-wrapper">
-                            <input type="text" class="form-control" name="url" placeholder="Enter website URL" required>
-                            <button type="submit" class="btn btn-success">Extract Contacts</button>
-                        </div>
-                    </form>
-                    {% if message %}
-                    <div class="alert alert-info mt-3 mb-0">{{ message }}</div>
-                    {% endif %}
-                </div>
+        <div class="main-title-wrapper">
+            <div class="main-title">
+                Contact Extractor
             </div>
+            <span class="agent-info">
+                Agent: {{ session['agent_number'] }}
+                <a href="{{ url_for('logout') }}" class="btn btn-link btn-sm">Logout</a>
+            </span>
         </div>
-        <div class="row justify-content-center mt-4">
-            <div class="col-12">
+        <div class="card-bar">
+            <form method="POST" class="mb-0">
+                <div class="input-wrapper">
+                    <input type="text" class="form-control" name="url" placeholder="Enter website URL" required>
+                    <button type="submit" class="btn btn-success">Extract Contacts</button>
+                </div>
+            </form>
+            {% if message %}
+            <div class="alert alert-info mt-3 mb-0">{{ message }}</div>
+            {% endif %}
+        </div>
+        <div class="row justify-content-center mt-5">
+            <div class="col-md-12">
                 <h4 class="mb-3 text-center">Stored Contacts</h4>
                 <div class="search-bar-row">
                     <input type="text" id="tableSearch" class="form-control search-bar" placeholder="Search contacts...">
@@ -128,8 +161,8 @@
                         <tbody>
                             {% for row in all_contacts %}
                             <tr>
-                                <td class="id-col">{{ loop.index }}</td>
-                                <td class="website-col" style="vertical-align: middle;">
+                                <td data-label="ID" class="id-col">{{ loop.index }}</td>
+                                <td data-label="Website" class="website-col" style="vertical-align: middle;">
                                     <div style="display: flex; align-items: center; justify-content: space-between;">
                                         <a href="{{ row.website }}" target="_blank" style="flex:1;">{{ row.website }}</a>
                                         <form method="POST" action="{{ url_for('refresh_contact', sno=row.sno) }}" style="margin-left: 8px;">
@@ -139,27 +172,27 @@
                                         </form>
                                     </div>
                                 </td>
-                                <td>
+                                <td data-label="Emails">
                                     {% for email in (row.emails or '').split(',') if email %}
                                         {{ email }}<br>
                                     {% endfor %}
                                 </td>
-                                <td>
+                                <td data-label="Mobile Numbers">
                                     {% for mobile in (row.mobiles or '').split(',') if mobile %}
                                         <a href="#" class="call-link" data-mobile="{{ mobile|replace(' ', '')|replace('-', '')|trim }}">{{ mobile|replace(' ', '')|replace('-', '')|trim }}</a><br>
                                     {% endfor %}
                                 </td>
-                                <td>
+                                <td data-label="Landline Numbers">
                                     {% for landline in (row.landlines or '').split(',') if landline %}
                                         <a href="#" class="call-link" data-mobile="{{ landline|replace(' ', '')|replace('-', '')|trim }}">{{ landline|replace(' ', '')|replace('-', '')|trim }}</a><br>
                                     {% endfor %}
                                 </td>
-                                <td class="date-col">
+                                <td data-label="Date Added" class="date-col">
                                     {% if row.date_uploaded %}
                                         {{ row.date_uploaded.strftime("%d-%b-%Y").lower() }}
                                     {% endif %}
                                 </td>
-                                <td class="delete-col">
+                                <td data-label="Delete" class="delete-col">
                                     <form method="POST"
                                           id="deleteForm{{ row.sno }}"
                                           action="{{ url_for('delete_contact', sno=row.sno) }}"
