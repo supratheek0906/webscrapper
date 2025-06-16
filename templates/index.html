@@ -10,24 +10,22 @@
         body { background: #f8f9fa; }
         .main-title-wrapper {
             display: flex;
-font-weight: bold;
+            font-weight: bold;
             align-items: center;
             justify-content: space-between;
             margin-top: 5px;
             margin-bottom: 18px;
         }
-       .main-title {
-    font-size: 2.8rem;
-    font-weight: bold;
-    text-align: left;         /* or center, as you prefer */
-    margin-top: 20px;
-    margin-bottom: 18px;
-    margin-left: 410px;       /* adjust this value as needed */
-    letter-spacing: 1px;
-    color: #2b2d42;
-}
-
-
+        .main-title {
+            font-size: 2.8rem;
+            font-weight: bold;
+            text-align: left;
+            margin-top: 20px;
+            margin-bottom: 18px;
+            margin-left: 410px;
+            letter-spacing: 1px;
+            color: #2b2d42;
+        }
         .agent-info {
             font-size: 1rem;
             white-space: nowrap;
@@ -234,11 +232,17 @@ font-weight: bold;
                 if (deleteFormAction) { deleteFormAction.submit(); }
             });
 
-            // Click-to-call AJAX logic
+            
             document.querySelectorAll('.call-link').forEach(function(link) {
                 link.addEventListener('click', function(e) {
                     e.preventDefault();
-                    var number = this.getAttribute('data-mobile');
+                    var rawNumber = this.getAttribute('data-mobile');
+                    // Remove all spaces
+                    var number = rawNumber.replace(/\s+/g, '');
+                    // Add +91 if not present
+                    if (!number.startsWith('+91')) {
+                        number = '+91' + number;
+                    }
                     fetch('{{ url_for("click2call") }}', {
                         method: 'POST',
                         headers: {
