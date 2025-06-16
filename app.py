@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template, redirect, url_for, jsonify, flash, session
+from flask import Flask, request, render_template, redirect, url_for, jsonify, session
 import requests
 from bs4 import BeautifulSoup, NavigableString, Comment
 import re
@@ -36,7 +36,6 @@ def login():
             return redirect(url_for('index'))
     return render_template('login.html', error=error)
 
-# ADD THIS ROUTE TO FIX THE BuildError
 @app.route('/logout')
 def logout():
     session.pop('agent_number', None)
@@ -50,23 +49,16 @@ def decode_cfemail(cfemail):
     )
     return email
 
-def is_mobile(number):
-    digits = re.sub(r'\D', '', number)
-    return len(digits) == 10 and digits[0] in '789'
-
-def is_landline(number):
-    digits = re.sub(r'\D', '', number)
-    return (len(digits) >= 10 and (digits.startswith('0') or digits[0] in '23456'))
-
-def format_indian_number(number, is_landline=False):
-    digits = re.sub(r'\D', '', number)
-    if is_landline:
-        if digits.startswith('0'):
-            digits = digits[1:]
-        return f'+91{digits}' if digits else ''
-    else:
-        digits = digits[-10:]
-        return f'+91{digits}' if digits else ''
+def classify_numbers(numbers):
+    phones = set()
+    landlines = set()
+    for number in numbers:
+        digits = re.sub(r'\D', '', number)
+        if len(digits) == 10 and digits[0] in '6789':
+            phones.add(number)
+        else:
+            landlines.add(number)
+    return list(phones), list(landlines)
 
 def extract_contacts_from_url(url):
     headers = {
@@ -85,7 +77,7 @@ def extract_contacts_from_url(url):
         try:
             page_response = requests.get(page_url, headers=headers, timeout=15)
             page_response.raise_for_status()
-        except Exception as e:
+        except Exception:
             return set(), set(), None
         page_soup = BeautifulSoup(page_response.content, "html.parser")
         page_text = page_soup.get_text(separator=' ', strip=True)
@@ -109,7 +101,28 @@ def extract_contacts_from_url(url):
             match = re.search(email_pattern, email_candidate)
             if match:
                 page_emails.add(match.group())
-        phone_pattern = r'(?:(?:\+91[\-\s]*)?(?:0)?[1-9]\d{1,4}[\-\s]?\d{6,8})'
+        # Use ONLY the provided phone regex
+        phone_pattern = (
+            r'\b\d{5}[-\s]\d{5}\b'
+            r'|\b0?40[-\s]?\d{8}\b'
+            r'|\+91[-\s]?40[-\s]?\d{8}\b'
+            r'|\b0?80[-\s]?\d{8}\b'
+            r'|\+91[-\s]?80[-\s]?\d{8}\b'
+            r'|\+91[-\s]?\d{10}'
+            r'|\+91\s\d{2,4}\s\d{6,8}'
+            r'|\b0\d{9,10}\b'
+            r'|\b\d{10}\b'
+            r'|\b\d{3,4}\s\d{3,4}\s\d{3,4}\b'
+            r'|\+91(?:-\d{2,5}){1,5}(?:/\d{1,4})?'
+            r'|\b(?:\d{2,5}-){2,}\d{2,5}(?:/\d{1,4})?\b'
+            r'|\b1\d{3}[\s-]?\d{3}[\s-]?\d{4}\b'
+            r'|\b0?\d{2,4}-\d{6,8}\b'
+            r'|\+91[\s-]?\d{2,4}[\s-]?\d{4}[\s-]?\d{4}'
+            r'|\b\d{3,4}-\d{5,8}(?:/\d{2,8})+\b'
+            r'|\+91[\s-]*\d{2,4}[\s-]*\d{5,8}(?:/\d{2,8})+\b'
+            r'|\b\d{3,4}[-\s]\d{6,8}\b'
+            r'\+91\s\d{5}\s\d{5}'
+        )
         date_pattern = r'\b\d{1,2}-\d{1,2}-\d{4}\b'
         page_phones = set()
         for phone in re.findall(phone_pattern, page_text):
@@ -135,18 +148,8 @@ def extract_contacts_from_url(url):
             emails.update(c_emails)
             phones.update(c_phones)
 
-    print("Raw phone matches:", phones)
-
-    mobiles = set()
-    landlines = set()
-    for phone in phones:
-        if is_mobile(phone):
-            mobiles.add(format_indian_number(phone, is_landline=False))
-        elif is_landline(phone):
-            landlines.add(format_indian_number(phone, is_landline=True))
-    print("Extracted mobiles:", mobiles)
-    print("Extracted landlines:", landlines)
-    return list(emails), list(mobiles), list(landlines)
+    mobiles, landlines = classify_numbers(phones)
+    return list(emails), mobiles, landlines
 
 def store_or_update_contacts_in_mysql(emails, mobiles, landlines, website):
     conn = None
@@ -263,14 +266,11 @@ def click2call():
     agent_number = session['agent_number']
     if not customer_number:
         return jsonify({"success": False, "message": "Customer number is required"})
-    if is_mobile(customer_number):
-        customer_number = format_indian_number(customer_number, is_landline=False)
-    elif is_landline(customer_number):
-        customer_number = format_indian_number(customer_number, is_landline=True)
-    else:
-        customer_number = format_indian_number(customer_number, is_landline=False)
-    if not customer_number.startswith('+91') or len(customer_number) < 12:
-        return jsonify({"success": False, "message": "Phone number must be in E.164 format (starting with +91 and STD code for landlines or 10 digits for mobiles)"})
+    # Remove all spaces
+    customer_number = customer_number.replace(' ', '')
+    # Add +91 if not present
+    if not customer_number.startswith('+91'):
+        customer_number = '+91' + customer_number
     api_url = f"https://kpi.knowlarity.com/{KNOWLARITY_CHANNEL}/v1/account/call/makecall"
     headers = {
         'Content-Type': 'application/json',
@@ -287,8 +287,6 @@ def click2call():
     }
     try:
         response = requests.post(api_url, json=payload, headers=headers, timeout=30)
-        print("Knowlarity API status:", response.status_code)
-        print("Knowlarity API response:", response.text)
         if response.status_code == 200:
             try:
                 data = response.json()
