@@ -31,8 +31,20 @@
             white-space: nowrap;
             margin-left: 20px;
         }
-        .card-bar { max-width: 750px; min-width: 320px; margin: 0 auto 32px auto; border-radius: 16px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); padding: 14px 24px 10px 24px; background: #fff; }
-        .input-wrapper { display: flex; gap: 10px; align-items: center; }
+        .card-bar {
+            max-width: 750px;
+            min-width: 320px;
+            margin: 0 auto 32px auto;
+            border-radius: 16px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+            padding: 14px 24px 10px 24px;
+            background: #fff;
+        }
+        .input-wrapper {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
         .input-wrapper .form-control { flex: 2 1 0; }
         .input-wrapper .btn-success {
             flex: 1 1 0;
@@ -62,7 +74,7 @@
         .table-responsive { overflow-x: auto; }
         @media (max-width: 900px) { .card-bar { max-width: 100%; } }
         @media (max-width: 600px) {
-            .main-title { font-size: 2rem; }
+            .main-title { font-size: 2rem; margin-left: 0; text-align: center; }
             .main-title-wrapper { margin-top: 30px; margin-bottom: 10px; flex-direction: column; align-items: flex-start; }
             .agent-info { margin-left: 0; margin-top: 8px; align-self: flex-end; }
             .card-bar { max-width: 100%; min-width: 0; padding: 10px 8px 8px 8px; }
@@ -232,17 +244,11 @@
                 if (deleteFormAction) { deleteFormAction.submit(); }
             });
 
-            
+            // Click-to-call AJAX logic
             document.querySelectorAll('.call-link').forEach(function(link) {
                 link.addEventListener('click', function(e) {
                     e.preventDefault();
-                    var rawNumber = this.getAttribute('data-mobile');
-                    // Remove all spaces
-                    var number = rawNumber.replace(/\s+/g, '');
-                    // Add +91 if not present
-                    if (!number.startsWith('+91')) {
-                        number = '+91' + number;
-                    }
+                    var number = this.getAttribute('data-mobile');
                     fetch('{{ url_for("click2call") }}', {
                         method: 'POST',
                         headers: {
