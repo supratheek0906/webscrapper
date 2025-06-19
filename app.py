@@ -53,8 +53,16 @@ def classify_numbers(numbers):
     phones = set()
     landlines = set()
     for number in numbers:
-        digits = re.sub(r'\D', '', number)
-        if len(digits) == 10 and digits[0] in '6789':
+        clean = re.sub(r'[^\d+]', '', number)
+        if clean.startswith('0') and not clean.startswith('00'):
+            clean = clean[1:]
+        if clean.startswith('+91'):
+            num = clean[3:]
+        elif clean.startswith('91') and len(clean) > 10:
+            num = clean[2:]
+        else:
+            num = clean
+        if len(num) == 10 and num[0] in '6789':
             phones.add(number)
         else:
             landlines.add(number)
@@ -101,7 +109,6 @@ def extract_contacts_from_url(url):
             match = re.search(email_pattern, email_candidate)
             if match:
                 page_emails.add(match.group())
-        # Use ONLY the provided phone regex
         phone_pattern = (
             r'\b\d{5}[-\s]\d{5}\b'
             r'|\b0?40[-\s]?\d{8}\b'
@@ -110,17 +117,17 @@ def extract_contacts_from_url(url):
             r'|\+91[-\s]?80[-\s]?\d{8}\b'
             r'|\+91[-\s]?\d{10}'
             r'|\+91\s\d{2,4}\s\d{6,8}'
-            r'|\b0\d{9,10}\b'
-            r'|\b\d{10}\b'
-            r'|\b\d{3,4}\s\d{3,4}\s\d{3,4}\b'
-            r'|\+91(?:-\d{2,5}){1,5}(?:/\d{1,4})?'
-            r'|\b(?:\d{2,5}-){2,}\d{2,5}(?:/\d{1,4})?\b'
-            r'|\b1\d{3}[\s-]?\d{3}[\s-]?\d{4}\b'
-            r'|\b0?\d{2,4}-\d{6,8}\b'
-            r'|\+91[\s-]?\d{2,4}[\s-]?\d{4}[\s-]?\d{4}'
-            r'|\b\d{3,4}-\d{5,8}(?:/\d{2,8})+\b'
-            r'|\+91[\s-]*\d{2,4}[\s-]*\d{5,8}(?:/\d{2,8})+\b'
-            r'|\b\d{3,4}[-\s]\d{6,8}\b'
+            r'\b0\d{9,10}\b'
+            r'\b\d{10}\b'
+            r'\b\d{3,4}\s\d{3,4}\s\d{3,4}\b'
+            r'\+91(?:-\d{2,5}){1,5}(?:/\d{1,4})?'
+            r'\b(?:\d{2,5}-){2,}\d{2,5}(?:/\d{1,4})?\b'
+            r'\b1\d{3}[\s-]?\d{3}[\s-]?\d{4}\b'
+            r'\b0?\d{2,4}-\d{6,8}\b'
+            r'\+91[\s-]?\d{2,4}[\s-]?\d{4}[\s-]?\d{4}'
+            r'\b\d{3,4}-\d{5,8}(?:/\d{2,8})+\b'
+            r'\+91[\s-]*\d{2,4}[\s-]*\d{5,8}(?:/\d{2,8})+\b'
+            r'\b\d{3,4}[-\s]\d{6,8}\b'
             r'\+91\s\d{5}\s\d{5}'
         )
         date_pattern = r'\b\d{1,2}-\d{1,2}-\d{4}\b'
@@ -266,9 +273,7 @@ def click2call():
     agent_number = session['agent_number']
     if not customer_number:
         return jsonify({"success": False, "message": "Customer number is required"})
-    # Remove all spaces
     customer_number = customer_number.replace(' ', '')
-    # Add +91 if not present
     if not customer_number.startswith('+91'):
         customer_number = '+91' + customer_number
     api_url = f"https://kpi.knowlarity.com/{KNOWLARITY_CHANNEL}/v1/account/call/makecall"
@@ -307,6 +312,45 @@ def click2call():
         return jsonify({"success": False, "message": f"Network error: {str(e)}"})
     except Exception as e:
         return jsonify({"success": False, "message": f"Unexpected error: {str(e)}"})
+
+@app.route('/log_activity', methods=['POST'])
+def log_activity():
+    if 'agent_number' not in session:
+        return jsonify({'success': False, 'message': 'Not logged in'}), 401
+    data = request.json
+    contact_type = data.get('contact_type')
+    contact_value = data.get('contact_value')
+    agent_number = session['agent_number']
+    clicked_at = datetime.now()
+    try:
+        conn = mysql.connector.connect(**db_config)
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO call_activity (agent_number, contact_type, contact_value, clicked_at)
+            VALUES (%s, %s, %s, %s)
+        """, (agent_number, contact_type, contact_value, clicked_at))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/activity')
+def activity():
+    if 'agent_number' not in session:
+        return redirect(url_for('login'))
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT agent_number, contact_type, contact_value, clicked_at
+        FROM call_activity
+        ORDER BY clicked_at DESC
+    """)
+    activities = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return render_template('activity.html', activities=activities)
 
 @app.errorhandler(404)
 def not_found(error):
