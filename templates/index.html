@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <title>Contact Extractor</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <!-- Bootstrap CSS CDN -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body { background: #f8f9fa; }
@@ -33,6 +32,12 @@
             margin-bottom: 8px;
             text-align: center;
             flex: 1 1 100%;
+        }
+        .view-activity-btn-fixed {
+            position: fixed;
+            top: 20px;
+            right: 30px;
+            z-index: 1050;
         }
         .card-bar {
             width: 100%;
@@ -85,7 +90,6 @@
         .call-link:hover {
             color: #145c32;
         }
-        /* Responsive styles */
         @media (max-width: 900px) {
             .card-bar { max-width: 100%; }
         }
@@ -99,7 +103,6 @@
             .search-bar-row { flex-direction: column; align-items: flex-start; }
             .search-bar { width: 100%; }
             .website-col { max-width: 100%; }
-            /* Table mobile stacking */
             .table thead { display: none; }
             .table, .table tbody, .table tr, .table td { display: block; width: 100%; }
             .table tr { margin-bottom: 1rem; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.04); background: #fff; }
@@ -114,10 +117,24 @@
                 font-weight: bold;
                 color: #2b2d42;
             }
+            .view-activity-btn-fixed {
+                position: static;
+                display: block;
+                margin: 0 auto 10px auto;
+                width: 90vw;
+                max-width: 300px;
+                top: unset;
+                right: unset;
+            }
         }
     </style>
 </head>
 <body>
+    <a href="{{ url_for('activity') }}"
+       class="btn btn-primary view-activity-btn-fixed shadow"
+       style="font-weight:500;">
+        View Activity
+    </a>
     <div class="container">
         <div class="main-title-wrapper">
             <div class="main-title">
@@ -179,12 +196,12 @@
                                 </td>
                                 <td data-label="Mobile Numbers">
                                     {% for mobile in (row.mobiles or '').split(',') if mobile %}
-                                        <a href="#" class="call-link" data-mobile="{{ mobile|replace(' ', '')|replace('-', '')|trim }}">{{ mobile|replace(' ', '')|replace('-', '')|trim }}</a><br>
+                                        <a href="#" class="call-link" data-mobile="{{ mobile|replace(' ', '')|replace('-', '')|trim }}" data-type="phone">{{ mobile|replace(' ', '')|replace('-', '')|trim }}</a><br>
                                     {% endfor %}
                                 </td>
                                 <td data-label="Landline Numbers">
                                     {% for landline in (row.landlines or '').split(',') if landline %}
-                                        <a href="#" class="call-link" data-mobile="{{ landline|replace(' ', '')|replace('-', '')|trim }}">{{ landline|replace(' ', '')|replace('-', '')|trim }}</a><br>
+                                        <a href="#" class="call-link" data-mobile="{{ landline|replace(' ', '')|replace('-', '')|trim }}" data-type="landline">{{ landline|replace(' ', '')|replace('-', '')|trim }}</a><br>
                                     {% endfor %}
                                 </td>
                                 <td data-label="Date Added" class="date-col">
@@ -219,13 +236,10 @@
             </div>
         </div>
     </div>
-    <!-- Toast for call status -->
     <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 9999">
       <div id="callToast" class="toast align-items-center text-bg-primary border-0" role="alert" aria-live="assertive" aria-atomic="true">
         <div class="d-flex">
-          <div class="toast-body" id="callToastBody">
-            <!-- Status will appear here -->
-          </div>
+          <div class="toast-body" id="callToastBody"></div>
           <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
         </div>
       </div>
@@ -266,11 +280,22 @@
                 if (deleteFormAction) { deleteFormAction.submit(); }
             });
 
-            // Click-to-call AJAX logic
             document.querySelectorAll('.call-link').forEach(function(link) {
                 link.addEventListener('click', function(e) {
                     e.preventDefault();
                     var number = this.getAttribute('data-mobile');
+                    var contactType = this.getAttribute('data-type') || 'phone';
+                    fetch('{{ url_for("log_activity") }}', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        body: JSON.stringify({
+                            contact_type: contactType,
+                            contact_value: number
+                        })
+                    });
                     fetch('{{ url_for("click2call") }}', {
                         method: 'POST',
                         headers: {
