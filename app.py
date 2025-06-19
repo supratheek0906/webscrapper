@@ -16,13 +16,16 @@ db_config = {
     'database': 'contactdb'
 }
 
-# Knowlarity API config
 KNOWLARITY_SR_API_KEY = '7dee7087-b035-4557-9489-53b943dbfbcc'
 KNOWLARITY_X_API_KEY = 'R3zHw7U5agaREaDVuzBeN6ke5vrY3QXda97pH2PJ'
 KNOWLARITY_K_NUMBER = '+917353950600'
 KNOWLARITY_AGENT_NUMBER = '+917093284780'
 KNOWLARITY_CALLER_ID = '+918048160852'
 KNOWLARITY_CHANNEL = 'Basic'
+
+def is_valid_phone_number(number):
+    digits = re.sub(r'\D', '', number)
+    return len(digits) >= 10
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -111,30 +114,32 @@ def extract_contacts_from_url(url):
                 page_emails.add(match.group())
         phone_pattern = (
             r'\b\d{5}[-\s]\d{5}\b'
+            r'|\b\d{4}\s\d{3}\s\d{3}\b'
             r'|\b0?40[-\s]?\d{8}\b'
             r'|\+91[-\s]?40[-\s]?\d{8}\b'
             r'|\b0?80[-\s]?\d{8}\b'
             r'|\+91[-\s]?80[-\s]?\d{8}\b'
             r'|\+91[-\s]?\d{10}'
             r'|\+91\s\d{2,4}\s\d{6,8}'
-            r'\b0\d{9,10}\b'
-            r'\b\d{10}\b'
-            r'\b\d{3,4}\s\d{3,4}\s\d{3,4}\b'
-            r'\+91(?:-\d{2,5}){1,5}(?:/\d{1,4})?'
-            r'\b(?:\d{2,5}-){2,}\d{2,5}(?:/\d{1,4})?\b'
-            r'\b1\d{3}[\s-]?\d{3}[\s-]?\d{4}\b'
-            r'\b0?\d{2,4}-\d{6,8}\b'
-            r'\+91[\s-]?\d{2,4}[\s-]?\d{4}[\s-]?\d{4}'
-            r'\b\d{3,4}-\d{5,8}(?:/\d{2,8})+\b'
-            r'\+91[\s-]*\d{2,4}[\s-]*\d{5,8}(?:/\d{2,8})+\b'
-            r'\b\d{3,4}[-\s]\d{6,8}\b'
+            r'|\b0\d{9,10}\b'
+            r'|\b\d{10}\b'
+            r'|\b\d{3,4}\s\d{3,4}\s\d{3,4}\b'
+            r'|\+91(?:-\d{2,5}){1,5}(?:/\d{1,4})?'
+            r'|\b(?:\d{2,5}-){2,}\d{2,5}(?:/\d{1,4})?\b'
+            r'|\b1\d{3}[\s-]?\d{3}[\s-]?\d{4}\b'
+            r'|\b0?\d{2,4}-\d{6,8}\b'
+            r'|\+91[\s-]?\d{2,4}[\s-]?\d{4}[\s-]?\d{4}'
+            r'|\b\d{3,4}-\d{5,8}(?:/\d{2,8})+\b'
+            r'|\+91[\s-]*\d{2,4}[\s-]*\d{5,8}(?:/\d{2,8})+\b'
+            r'|\b\d{3,4}[-\s]\d{6,8}\b'
             r'\+91\s\d{5}\s\d{5}'
         )
         date_pattern = r'\b\d{1,2}-\d{1,2}-\d{4}\b'
         page_phones = set()
         for phone in re.findall(phone_pattern, page_text):
             if not re.fullmatch(date_pattern, phone):
-                page_phones.add(phone)
+                if is_valid_phone_number(phone):
+                    page_phones.add(phone)
         return page_emails, page_phones, page_soup
 
     main_emails, main_phones, soup = process_page(url)
@@ -156,7 +161,10 @@ def extract_contacts_from_url(url):
             phones.update(c_phones)
 
     mobiles, landlines = classify_numbers(phones)
-    return list(emails), mobiles, landlines
+    mobiles = list(dict.fromkeys(mobiles))
+    landlines = list(dict.fromkeys(landlines))
+    emails = list(dict.fromkeys(emails))
+    return emails, mobiles, landlines
 
 def store_or_update_contacts_in_mysql(emails, mobiles, landlines, website):
     conn = None
@@ -166,6 +174,15 @@ def store_or_update_contacts_in_mysql(emails, mobiles, landlines, website):
         emails_str = ','.join(sorted(emails))
         mobiles_str = ','.join(sorted(mobiles))
         landlines_str = ','.join(sorted(landlines))
+
+        cursor.execute("""
+            SELECT sno FROM contacts
+            WHERE emails = %s AND mobiles = %s AND landlines = %s AND deleted = FALSE
+        """, (emails_str, mobiles_str, landlines_str))
+        duplicate = cursor.fetchone()
+        if duplicate:
+            return "These contacts already exist in the database. No new record added."
+
         cursor.execute("SELECT emails, mobiles, landlines FROM contacts WHERE website = %s AND deleted = FALSE", (website,))
         result = cursor.fetchone()
         if result:
