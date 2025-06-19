@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Call/Click Activity</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background: #f8f9fa; }
+        .activity-container {
+            max-width: 900px;
+            margin: 40px auto 0 auto;
+            background: #fff;
+            border-radius: 14px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+            padding: 32px 24px;
+        }
+        .activity-title {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #2b2d42;
+            margin-bottom: 24px;
+            text-align: center;
+        }
+        .table thead { background: linear-gradient(90deg, #5e72e4 0%, #2dce89 100%); color: #fff; }
+        .table-striped > tbody > tr:nth-of-type(odd) { background-color: #e9f7ef; }
+        .table-striped > tbody > tr:nth-of-type(even) { background-color: #f8f9fa; }
+        .table td, .table th { vertical-align: middle !important; word-break: break-word; }
+        @media (max-width: 700px) {
+            .activity-container { padding: 12px 2px; }
+            .activity-title { font-size: 1.3rem; }
+            .table thead { display: none; }
+            .table, .table tbody, .table tr, .table td { display: block; width: 100%; }
+            .table tr { margin-bottom: 1rem; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.04); background: #fff; }
+            .table td { text-align: right; padding-left: 50%; position: relative; border: none; border-bottom: 1px solid #eee; }
+            .table td::before {
+                content: attr(data-label);
+                position: absolute;
+                left: 1rem;
+                width: 45%;
+                white-space: nowrap;
+                text-align: left;
+                font-weight: bold;
+                color: #2b2d42;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="activity-container">
+        <div class="activity-title">Call/Click Activity</div>
+        <div class="mb-3 text-end">
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">Back to Dashboard</a>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-bordered table-striped align-middle">
+                <thead>
+                    <tr>
+                        <th>Number Clicked</th>
+                        <th>Type</th>
+                        <th>Agent</th>
+                        <th>Date & Time</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for act in activities %}
+                    <tr>
+                        <td data-label="Number Clicked">{{ act.contact_value }}</td>
+                        <td data-label="Type">{{ act.contact_type|capitalize }}</td>
+                        <td data-label="Agent">{{ act.agent_number }}</td>
+                        <td data-label="Date & Time">
+                            {{ act.clicked_at.strftime("%d-%b-%Y %I:%M %p") if act.clicked_at else "" }}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="4" class="text-center">No activity recorded yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+</html>
