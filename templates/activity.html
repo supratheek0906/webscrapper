@@ -22,13 +22,40 @@
             margin-bottom: 24px;
             text-align: center;
         }
+        .btn-dashboard {
+            background-color: #2091d6 !important;
+            color: #fff !important;
+            border: none !important;
+            font-weight: 500;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.07);
+            padding: 3px 14px;
+            font-size: 0.98rem;
+        }
+        .btn-dashboard:hover,
+        .btn-dashboard:focus {
+            background-color: #1671a6 !important;
+            color: #fff !important;
+        }
         .table thead { background: linear-gradient(90deg, #5e72e4 0%, #2dce89 100%); color: #fff; }
         .table-striped > tbody > tr:nth-of-type(odd) { background-color: #e9f7ef; }
         .table-striped > tbody > tr:nth-of-type(even) { background-color: #f8f9fa; }
         .table td, .table th { vertical-align: middle !important; word-break: break-word; }
+        .activity-table-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .activity-search {
+            width: 180px;
+        }
         @media (max-width: 700px) {
             .activity-container { padding: 12px 2px; }
             .activity-title { font-size: 1.3rem; }
+            .activity-table-controls { flex-direction: column; align-items: stretch; gap: 7px; }
+            .activity-search { width: 100%; }
             .table thead { display: none; }
             .table, .table tbody, .table tr, .table td { display: block; width: 100%; }
             .table tr { margin-bottom: 1rem; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.04); background: #fff; }
@@ -49,11 +76,18 @@
 <body>
     <div class="activity-container">
         <div class="activity-title">Call/Click Activity</div>
-        <div class="mb-3 text-end">
-            <a href="{{ url_for('index') }}" class="btn btn-secondary">Back to Dashboard</a>
+        <div class="activity-table-controls">
+            <input
+                type="text"
+                id="activitySearch"
+                class="form-control form-control-sm activity-search"
+                placeholder="Search..."
+                autocomplete="off"
+            >
+            <a href="{{ url_for('index') }}" class="btn btn-dashboard ms-auto">Back to Dashboard</a>
         </div>
         <div class="table-responsive">
-            <table class="table table-bordered table-striped align-middle">
+            <table class="table table-bordered table-striped align-middle" id="activityTable">
                 <thead>
                     <tr>
                         <th>Number Clicked</th>
@@ -81,5 +115,15 @@
             </table>
         </div>
     </div>
+    <script>
+        document.getElementById('activitySearch').addEventListener('input', function() {
+            var filter = this.value.toLowerCase();
+            var rows = document.querySelectorAll('#activityTable tbody tr');
+            rows.forEach(function(row) {
+                var rowText = row.innerText.toLowerCase();
+                row.style.display = rowText.includes(filter) ? '' : 'none';
+            });
+        });
+    </script>
 </body>
 </html>
