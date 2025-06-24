@@ -4,7 +4,10 @@ from bs4 import BeautifulSoup, NavigableString, Comment
 import re
 import mysql.connector
 from datetime import datetime
+import pytz
 import json
+import math
+import os
 
 app = Flask(__name__)
 app.secret_key = '1234'
@@ -16,12 +19,10 @@ db_config = {
     'database': 'contactdb'
 }
 
-KNOWLARITY_SR_API_KEY = '7dee7087-b035-4557-9489-53b943dbfbcc'
-KNOWLARITY_X_API_KEY = 'R3zHw7U5agaREaDVuzBeN6ke5vrY3QXda97pH2PJ'
-KNOWLARITY_K_NUMBER = '+917353950600'
-KNOWLARITY_AGENT_NUMBER = '+917093284780'
-KNOWLARITY_CALLER_ID = '+918048160852'
-KNOWLARITY_CHANNEL = 'Basic'
+SMARTFLO_API_URL = "https://api-smartflo.tatateleservices.com/v1/click_to_call"
+SMARTFLO_AUTH_TOKEN = os.environ.get('SMARTFLO_AUTH_TOKEN')
+
+IST = pytz.timezone('Asia/Kolkata')
 
 def is_valid_phone_number(number):
     digits = re.sub(r'\D', '', number)
@@ -31,17 +32,34 @@ def is_valid_phone_number(number):
 def login():
     error = None
     if request.method == 'POST':
-        agent_number = request.form.get('agent_number', '').strip()
-        if not agent_number or not (agent_number.isdigit() or (agent_number.startswith('+') and agent_number[1:].isdigit())) or len(agent_number.replace('+', '')) < 10:
-            error = "Please enter a valid agent number."
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '').strip()
+        if not username or not password:
+            error = "Please enter both username and password."
         else:
-            session['agent_number'] = agent_number
-            return redirect(url_for('index'))
+            try:
+                conn = mysql.connector.connect(**db_config)
+                cursor = conn.cursor(dictionary=True)
+                cursor.execute("SELECT * FROM agents WHERE username = %s", (username,))
+                user = cursor.fetchone()
+                cursor.close()
+                conn.close()
+            except Exception as e:
+                error = "Database error: " + str(e)
+                user = None
+
+            if user is None or user['password_hash'] != password:
+                error = "Invalid username or password."
+            else:
+                session['username'] = user['username']
+                session['agent_number'] = user['agent_number']
+                session['caller_id'] = user['caller_id']
+                return redirect(url_for('index'))
     return render_template('login.html', error=error)
 
 @app.route('/logout')
 def logout():
-    session.pop('agent_number', None)
+    session.clear()
     return redirect(url_for('login'))
 
 def decode_cfemail(cfemail):
@@ -174,7 +192,6 @@ def store_or_update_contacts_in_mysql(emails, mobiles, landlines, website):
         emails_str = ','.join(sorted(emails))
         mobiles_str = ','.join(sorted(mobiles))
         landlines_str = ','.join(sorted(landlines))
-
         cursor.execute("""
             SELECT sno FROM contacts
             WHERE emails = %s AND mobiles = %s AND landlines = %s AND deleted = FALSE
@@ -182,7 +199,6 @@ def store_or_update_contacts_in_mysql(emails, mobiles, landlines, website):
         duplicate = cursor.fetchone()
         if duplicate:
             return "These contacts already exist in the database. No new record added."
-
         cursor.execute("SELECT emails, mobiles, landlines FROM contacts WHERE website = %s AND deleted = FALSE", (website,))
         result = cursor.fetchone()
         if result:
@@ -212,13 +228,20 @@ def store_or_update_contacts_in_mysql(emails, mobiles, landlines, website):
             cursor.close()
             conn.close()
 
-def fetch_all_contacts():
+def fetch_contacts_paginated(page=1, per_page=10):
     contacts = []
+    total = 0
     conn = None
     try:
         conn = mysql.connector.connect(**db_config)
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT * FROM contacts WHERE deleted = FALSE ORDER BY sno ASC")
+        cursor.execute("SELECT COUNT(*) as count FROM contacts WHERE deleted = FALSE")
+        total = cursor.fetchone()['count']
+        offset = (page - 1) * per_page
+        cursor.execute(
+            "SELECT * FROM contacts WHERE deleted = FALSE ORDER BY sno ASC LIMIT %s OFFSET %s",
+            (per_page, offset)
+        )
         contacts = cursor.fetchall()
         for row in contacts:
             if isinstance(row['date_uploaded'], str):
@@ -232,19 +255,29 @@ def fetch_all_contacts():
         if conn is not None and conn.is_connected():
             cursor.close()
             conn.close()
-    return contacts
+    return contacts, total
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
-    if 'agent_number' not in session:
+    if 'agent_number' not in session or 'caller_id' not in session:
         return redirect(url_for('login'))
     message = ""
     if request.method == 'POST':
         url = request.form['url']
         emails, mobiles, landlines = extract_contacts_from_url(url)
         message = store_or_update_contacts_in_mysql(emails, mobiles, landlines, url)
-    all_contacts = fetch_all_contacts()
-    return render_template('index.html', all_contacts=all_contacts, message=message)
+    # Pagination logic
+    page = request.args.get('page', 1, type=int)
+    per_page = 10
+    all_contacts, total = fetch_contacts_paginated(page, per_page)
+    total_pages = math.ceil(total / per_page)
+    return render_template(
+        'index.html',
+        all_contacts=all_contacts,
+        message=message,
+        page=page,
+        total_pages=total_pages
+    )
 
 @app.route('/delete/<int:sno>', methods=['POST'])
 def delete_contact(sno):
@@ -284,47 +317,50 @@ def refresh_contact(sno):
 
 @app.route('/click2call', methods=['POST'])
 def click2call():
-    if 'agent_number' not in session:
-        return jsonify({"success": False, "message": "You must log in with your agent number."}), 401
+    if 'agent_number' not in session or 'caller_id' not in session:
+        return jsonify({"success": False, "message": "You must log in."}), 401
+
     customer_number = request.json.get('number')
     agent_number = session['agent_number']
+    caller_id = session['caller_id']
     if not customer_number:
         return jsonify({"success": False, "message": "Customer number is required"})
-    customer_number = customer_number.replace(' ', '')
-    if not customer_number.startswith('+91'):
-        customer_number = '+91' + customer_number
-    api_url = f"https://kpi.knowlarity.com/{KNOWLARITY_CHANNEL}/v1/account/call/makecall"
+
+    # Format numbers as required by Smartflo (remove spaces, plus, etc.)
+    customer_number = customer_number.replace(' ', '').replace('+', '')
+    agent_number = agent_number.replace(' ', '').replace('+', '')
+    caller_id = caller_id.replace(' ', '').replace('+', '')
+
     headers = {
-        'Content-Type': 'application/json',
-        'authorization': KNOWLARITY_SR_API_KEY,
-        'x-api-key': KNOWLARITY_X_API_KEY,
-        'channel': KNOWLARITY_CHANNEL,
-        'cache-control': 'no-cache'
+        'Authorization': SMARTFLO_AUTH_TOKEN,
+        'accept': 'application/json',
+        'content-type': 'application/json'
     }
     payload = {
-        "k_number": KNOWLARITY_K_NUMBER,
+        "async": 1,
         "agent_number": agent_number,
-        "customer_number": customer_number,
-        "caller_id": KNOWLARITY_CALLER_ID
+        "destination_number": customer_number,
+        "caller_id": caller_id
     }
+
     try:
-        response = requests.post(api_url, json=payload, headers=headers, timeout=30)
+        response = requests.post(SMARTFLO_API_URL, headers=headers, json=payload, timeout=30)
         if response.status_code == 200:
             try:
                 data = response.json()
                 return jsonify({"success": True, "message": "Call initiated successfully!", "data": data})
-            except json.JSONDecodeError:
+            except Exception:
                 return jsonify({"success": True, "message": "Call initiated successfully!", "data": {"raw_response": response.text}})
         else:
             try:
                 error_data = response.json()
-            except json.JSONDecodeError:
+            except Exception:
                 error_data = {"raw_response": response.text}
             return jsonify({"success": False, "message": f"API returned status code: {response.status_code}", "error_details": error_data})
     except requests.exceptions.Timeout:
         return jsonify({"success": False, "message": "Request timeout - API took too long to respond"})
     except requests.exceptions.ConnectionError:
-        return jsonify({"success": False, "message": "Connection error - Unable to reach Knowlarity API"})
+        return jsonify({"success": False, "message": "Connection error - Unable to reach Smartflo API"})
     except requests.exceptions.RequestException as e:
         return jsonify({"success": False, "message": f"Network error: {str(e)}"})
     except Exception as e:
@@ -338,7 +374,7 @@ def log_activity():
     contact_type = data.get('contact_type')
     contact_value = data.get('contact_value')
     agent_number = session['agent_number']
-    clicked_at = datetime.now()
+    clicked_at = datetime.now(IST)
     try:
         conn = mysql.connector.connect(**db_config)
         cursor = conn.cursor()
