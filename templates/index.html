@@ -33,12 +33,6 @@
             text-align: center;
             flex: 1 1 100%;
         }
-        .view-activity-btn-fixed {
-            position: fixed;
-            top: 20px;
-            right: 30px;
-            z-index: 1050;
-        }
         .card-bar {
             width: 100%;
             max-width: 900px;
@@ -78,8 +72,6 @@
         th.date-col, td.date-col,
         th.delete-col, td.delete-col { white-space: nowrap; text-align: center; vertical-align: middle; }
         .alert-info { text-align: center; font-size: 1.1em; }
-        .search-bar-row { display: flex; justify-content: flex-start; align-items: center; margin-bottom: 18px; flex-wrap: wrap; }
-        .search-bar { width: 220px; margin-left: 0; }
         .table-responsive { overflow-x: auto; }
         .call-link {
             color: #198754;
@@ -89,6 +81,18 @@
         }
         .call-link:hover {
             color: #145c32;
+        }
+        .btn-activity {
+            background-color: #2091d6!important;
+            color: #fff !important;
+            border: none !important;
+            font-weight: 500;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.07);
+        }
+        .btn-activity:hover,
+        .btn-activity:focus {
+            background-color: #8c7b78 !important;
+            color: #fff !important;
         }
         @media (max-width: 900px) {
             .card-bar { max-width: 100%; }
@@ -100,8 +104,6 @@
             .card-bar { max-width: 100%; min-width: 0; padding: 10px 4px 8px 4px; }
             .input-wrapper { flex-direction: column; gap: 10px; }
             .form-control, .btn-success { width: 100%; flex: unset; }
-            .search-bar-row { flex-direction: column; align-items: flex-start; }
-            .search-bar { width: 100%; }
             .website-col { max-width: 100%; }
             .table thead { display: none; }
             .table, .table tbody, .table tr, .table td { display: block; width: 100%; }
@@ -117,24 +119,10 @@
                 font-weight: bold;
                 color: #2b2d42;
             }
-            .view-activity-btn-fixed {
-                position: static;
-                display: block;
-                margin: 0 auto 10px auto;
-                width: 90vw;
-                max-width: 300px;
-                top: unset;
-                right: unset;
-            }
         }
     </style>
 </head>
 <body>
-    <a href="{{ url_for('activity') }}"
-       class="btn btn-primary view-activity-btn-fixed shadow"
-       style="font-weight:500;">
-        View Activity
-    </a>
     <div class="container">
         <div class="main-title-wrapper">
             <div class="main-title">
@@ -158,8 +146,15 @@
         </div>
         <div class="row justify-content-center mt-5">
             <div class="col-md-12">
-                                <div class="search-bar-row">
-                    <input type="text" id="tableSearch" class="form-control search-bar" placeholder="Search contacts...">
+                <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap">
+                    <div class="flex-grow-1" style="max-width:220px;">
+                        <input type="text" id="tableSearch" class="form-control search-bar" placeholder="Search contacts...">
+                    </div>
+                    <div>
+                        <a href="{{ url_for('activity') }}" class="btn btn-activity shadow">
+                            View Activity
+                        </a>
+                    </div>
                 </div>
                 <div class="table-responsive">
                     <table class="table table-bordered table-striped align-middle" id="contactsTable">
@@ -203,8 +198,7 @@
                                         <a href="#" class="call-link" data-mobile="{{ landline|replace(' ', '')|replace('-', '')|trim }}" data-type="landline">{{ landline|replace(' ', '')|replace('-', '')|trim }}</a><br>
                                     {% endfor %}
                                 </td>
-                                <td data-label="Date Added" class="date-col">
-                                    {% if row.date_uploaded %}
+                                <td data-label="Date Added" class="date-col">{% if row.date_uploaded %}
                                         {{ row.date_uploaded.strftime("%d-%b-%Y").lower() }}
                                     {% endif %}
                                 </td>
@@ -232,7 +226,6 @@
                         </tbody>
                     </table>
                 </div>
-                <!-- Pagination Controls -->
                 <nav aria-label="Contacts pagination">
                   <ul class="pagination justify-content-center">
                     <li class="page-item {% if page <= 1 %}disabled{% endif %}">
@@ -294,7 +287,6 @@
             document.getElementById('confirmDeleteBtn').addEventListener('click', function () {
                 if (deleteFormAction) { deleteFormAction.submit(); }
             });
-
             document.querySelectorAll('.call-link').forEach(function(link) {
                 link.addEventListener('click', function(e) {
                     e.preventDefault();
