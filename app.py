@@ -20,7 +20,8 @@ db_config = {
 }
 
 SMARTFLO_API_URL = "https://api-smartflo.tatateleservices.com/v1/click_to_call"
-SMARTFLO_AUTH_TOKEN = os.environ.get('SMARTFLO_AUTH_TOKEN')
+SMARTFLO_AUTH_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI1NTU4NzEiLCJpc3MiOiJodHRwczovL2Nsb3VkcGhvbmUudGF0YXRlbGVzZXJ2aWNlcy5jb20vdG9rZW4vZ2VuZXJhdGUiLCJpYXQiOjE3Mzc5NzU2NTMsImV4cCI6MjAzNzk3NTY1MywibmJmIjoxNzM3OTc1NjUzLCJqdGkiOiJES3pnUTlvNHJJRXpiUEFnIn0.UsCKyXk7Lu88Bn_YdrAIlLvFpHiNVNySfrpfbfeAo3M"
+
 
 IST = pytz.timezone('Asia/Kolkata')
 
