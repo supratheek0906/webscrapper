@@ -16,8 +16,12 @@
         <div class="main-title">Agent Login</div>
         <form method="POST">
             <div class="mb-3">
-                <label for="agent_number" class="form-label">Agent Number</label>
-                <input type="text" class="form-control" id="agent_number" name="agent_number" placeholder="Enter your agent number" required>
+                <label for="username" class="form-label">Username</label>
+                <input type="text" class="form-control" id="username" name="username" placeholder="Enter your username" required>
+            </div>
+            <div class="mb-3">
+                <label for="password" class="form-label">Password</label>
+                <input type="password" class="form-control" id="password" name="password" placeholder="Enter your password" required>
             </div>
             {% if error %}
             <div class="alert alert-danger py-2">{{ error }}</div>
